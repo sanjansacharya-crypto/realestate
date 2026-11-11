@@ -1,0 +1,969 @@
+// Prisma Schema for Real Estate & Construction Management Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  PLATFORM_ADMIN
+  DEVELOPER
+  BUYER
+  CONTRACTOR
+  VENDOR
+  EMPLOYEE
+}
+
+enum OrganizationType {
+  DEVELOPER
+  CONTRACTOR
+  VENDOR
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+enum ProjectType {
+  PLOTTED_DEVELOPMENT
+  RESIDENTIAL_APARTMENT
+  COMMERCIAL
+  MIXED_USE
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
+enum AreaUnit {
+  ACRES
+  SQ_FT
+  SQ_METERS
+  HECTARES
+}
+
+enum AssignmentType {
+  CONTRACTOR
+  VENDOR
+}
+
+enum AssignmentStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  TERMINATED
+}
+
+enum ProjectMemberRole {
+  PROJECT_MANAGER
+  SITE_SUPERVISOR
+  SITE_ENGINEER
+  SALES_EXECUTIVE
+  BUYER
+  CONSULTANT
+}
+
+enum PlotStatus {
+  AVAILABLE
+  TEMPORARILY_RESERVED
+  BOOKING_PENDING
+  BOOKED
+  SOLD
+  BLOCKED
+}
+
+enum PlotFacing {
+  NORTH
+  SOUTH
+  EAST
+  WEST
+  NORTH_EAST
+  NORTH_WEST
+  SOUTH_EAST
+  SOUTH_WEST
+}
+
+enum PlotType {
+  RESIDENTIAL
+  COMMERCIAL
+  CORNER
+  VILLA_PLOT
+  PARK_FACING
+}
+
+enum BookingStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  RESERVED
+  REJECTED
+  PAYMENT_PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CHEQUE
+  DEMAND_DRAFT
+  UPI
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+}
+
+enum WorkPackageStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  ON_HOLD
+}
+
+enum ProgressUpdateStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum ModificationRequestStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum MaterialRequestStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  ORDERED
+  PARTIALLY_FULFILLED
+  FULFILLED
+  CANCELLED
+}
+enum PurchaseOrderStatus {
+  ISSUED
+  PARTIALLY_DELIVERED
+  FULFILLED
+  CANCELLED
+}
+enum DeliveryStatus {
+  RECORDED
+  INSPECTED
+}
+enum StockTransactionType {
+  RECEIPT
+  ISSUE
+  CONSUMPTION
+  WASTAGE
+  ADJUSTMENT
+}
+enum AttendanceStatus {
+  CHECKED_IN
+  CHECKED_OUT
+  CORRECTION_PENDING
+}
+enum DocumentCategory {
+  PROJECT
+  PROPERTY
+  BOOKING
+  CONTRACTOR
+  VENDOR
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+/// A person who can log in to the platform. A user's role and organization
+/// access is determined solely by their OrganizationMembership records.
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  phoneNumber  String?
+  isSuperAdmin Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships   OrganizationMembership[]
+  refreshTokens RefreshToken[]
+  createdProjects Project[] @relation("ProjectCreatedBy")
+  assignedOrgProjects    ProjectOrganizationAssignment[] @relation("OrgAssignmentAssignedBy")
+  projectMemberships     ProjectMember[]                 @relation("ProjectMemberUser")
+  assignedProjectMembers ProjectMember[]                 @relation("ProjectMemberAssignedBy")
+  buyerBookings          Booking[]                       @relation("BuyerBookings")
+  reviewedBookings       Booking[]                       @relation("ReviewedBookings")
+  recordedPayments       PaymentRecord[]                 @relation("PaymentRecordedBy")
+  verifiedPayments       PaymentRecord[]                 @relation("PaymentVerifiedBy")
+  bookingAuditLogs       BookingAuditLog[]
+  submittedProgressUpdates ProgressUpdate[] @relation("ProgressSubmittedBy")
+  reviewedProgressUpdates ProgressUpdate[] @relation("ProgressReviewedBy")
+  assignedWorkPackages WorkPackage[] @relation("WorkPackageAssignedBy")
+  buyerModificationRequests ModificationRequest[] @relation("ModificationBuyer")
+  reviewedModificationRequests ModificationRequest[] @relation("ModificationReviewer")
+  assignedModificationRequests ModificationRequest[] @relation("ModificationAssignedBy")
+  modificationStatusChanges ModificationRequestHistory[]
+  raisedMaterialRequests MaterialRequest[] @relation("MaterialRequestRaisedBy")
+  reviewedMaterialRequests MaterialRequest[] @relation("MaterialRequestReviewedBy")
+  createdPurchaseOrders PurchaseOrder[] @relation("PurchaseOrderCreatedBy")
+  createdStockReceipts StockReceipt[] @relation("StockReceiptInspectedBy")
+  createdMaterialIssues MaterialIssue[] @relation("MaterialIssueCreatedBy")
+  materialTransactions StockTransaction[] @relation("StockTransactionCreatedBy")
+  employeeAttendances Attendance[] @relation("AttendanceEmployee")
+  attendanceCorrections AttendanceCorrection[] @relation("AttendanceCorrectionRequestedBy")
+  attendanceReviews AttendanceCorrection[] @relation("AttendanceCorrectionReviewedBy")
+  uploadedDocuments DocumentMetadata[]
+  notifications Notification[]
+  actorAuditEvents AuditEvent[]
+
+  @@index([email])
+  @@map("users")
+}
+
+/// Stores cryptographically hashed refresh tokens for session management and revocation.
+/// Storing the SHA-256 hash of the token ensures tokens cannot be stolen from the database.
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @unique
+  userId    String   @db.Uuid
+  revoked   Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+/// A company or firm on the platform (Developer, Contractor, or Vendor).
+/// Acts as the tenant boundary: all data (projects, plots, bookings, etc.)
+/// is scoped to an organization and never crosses tenant lines.
+model Organization {
+  id        String           @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String           @unique
+  type      OrganizationType @default(DEVELOPER)
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  memberships OrganizationMembership[]
+  projects    Project[]
+  projectAssignments ProjectOrganizationAssignment[]
+  projectMemberships ProjectMember[]
+  bookings           Booking[]
+  contractorWorkPackages WorkPackage[]
+  assignedModificationRequests ModificationRequest[]
+  materialRequests MaterialRequest[]
+  vendorPurchaseOrders PurchaseOrder[]
+  materialDeliveries MaterialDelivery[]
+  materials Material[]
+  issuedMaterials MaterialIssue[]
+  documents DocumentMetadata[]
+  auditEvents AuditEvent[]
+
+  @@index([slug])
+  @@map("organizations")
+}
+
+/// Links a User to an Organization with a specific role.
+/// A user may belong to more than one organization with different roles.
+/// The unique constraint prevents duplicate memberships.
+model OrganizationMembership {
+  id             String           @id @default(uuid()) @db.Uuid
+  userId         String           @db.Uuid
+  organizationId String           @db.Uuid
+  role           Role
+  status         MembershipStatus @default(ACTIVE)
+  /// Marks the organization that is loaded by default after login.
+  isDefault      Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// A user can only have one membership record per organization.
+  @@unique([userId, organizationId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("organization_memberships")
+}
+
+// ---------------------------------------------------------------------------
+// Project Management (Phase 6)
+// ---------------------------------------------------------------------------
+
+/// Central parent entity for every real-estate development.
+/// All plots, bookings, work packages, and vendor orders hang off a Project.
+/// A project is strictly owned by one Developer Organization — no cross-tenant leakage.
+model Project {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @db.Uuid
+  createdById    String        @db.Uuid
+
+  /// Human-readable name, e.g. "Greenfield Meadows Phase 1"
+  name        String        @db.VarChar(120)
+  /// Short code unique within the organization, e.g. "GFM-01"
+  code        String        @db.VarChar(30)
+  description String?       @db.Text
+  projectType ProjectType   @default(PLOTTED_DEVELOPMENT)
+  status      ProjectStatus @default(PLANNING)
+
+  /// RERA (Real Estate Regulatory Authority) registration number
+  reraNumber String? @db.VarChar(60)
+
+  // Location
+  address    String? @db.VarChar(255)
+  city       String  @db.VarChar(100)
+  state      String  @db.VarChar(100)
+  postalCode String? @db.VarChar(20)
+  country    String  @default("India") @db.VarChar(100)
+  latitude   Decimal? @db.Decimal(10, 7)
+  longitude  Decimal? @db.Decimal(10, 7)
+
+  // Size & Timeline
+  totalArea              Decimal?  @db.Decimal(12, 2)
+  areaUnit               AreaUnit  @default(ACRES)
+  expectedStartDate      DateTime?
+  expectedCompletionDate DateTime?
+  actualCompletionDate   DateTime?
+
+  /// Soft-archive flag. Use ARCHIVED status + isActive=false for safe deactivation.
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  organizationAssignments ProjectOrganizationAssignment[]
+  members                 ProjectMember[]
+  plots                   Plot[]
+  bookings                Booking[]
+  workPackages            WorkPackage[]
+  modificationRequests ModificationRequest[]
+  materialRequests MaterialRequest[]
+  purchaseOrders PurchaseOrder[]
+  materialIssues MaterialIssue[]
+  stockTransactions StockTransaction[]
+  attendances Attendance[]
+  documents DocumentMetadata[]
+  notifications Notification[]
+  auditEvents AuditEvent[]
+
+  /// Project code must be unique within an organization
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([status])
+  @@index([city])
+  @@map("projects")
+}
+
+// ---------------------------------------------------------------------------
+// Project Membership & External Parties (Phase 7)
+// ---------------------------------------------------------------------------
+
+/// Links external organizations (Contractor, Vendor) to a Project.
+/// A Contractor or Vendor can be assigned to multiple projects.
+model ProjectOrganizationAssignment {
+  id             String           @id @default(uuid()) @db.Uuid
+  projectId      String           @db.Uuid
+  organizationId String           @db.Uuid
+  assignedById   String           @db.Uuid
+  assignmentType AssignmentType
+  status         AssignmentStatus @default(ACTIVE)
+  scopeOfWork    String?          @db.Text
+  startDate      DateTime?
+  endDate        DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  assignedBy   User         @relation("OrgAssignmentAssignedBy", fields: [assignedById], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, organizationId])
+  @@index([projectId])
+  @@index([organizationId])
+  @@map("project_organization_assignments")
+}
+
+/// Links individual users (Project Managers, Supervisors, Site Engineers, Buyers) to a Project.
+/// Enforces least-privilege: an employee only has access to projects they are explicitly assigned to.
+model ProjectMember {
+  id             String            @id @default(uuid()) @db.Uuid
+  projectId      String            @db.Uuid
+  userId         String            @db.Uuid
+  organizationId String            @db.Uuid
+  assignedById   String            @db.Uuid
+  role           ProjectMemberRole
+  status         AssignmentStatus  @default(ACTIVE)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user         User         @relation("ProjectMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  assignedBy   User         @relation("ProjectMemberAssignedBy", fields: [assignedById], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("project_members")
+}
+
+// ---------------------------------------------------------------------------
+// Plot & Property Inventory (Phase 8)
+// ---------------------------------------------------------------------------
+
+/// Individual plot/unit belonging to a project.
+/// Plot availability must be represented by explicit statuses.
+model Plot {
+  id               String      @id @default(uuid()) @db.Uuid
+  projectId        String      @db.Uuid
+
+  /// Unique plot identifier within this project, e.g. "P-101", "PLOT-A1"
+  plotNumber       String      @db.VarChar(50)
+  plotType         PlotType    @default(RESIDENTIAL)
+  status           PlotStatus  @default(AVAILABLE)
+
+  /// Plot dimensions & area
+  area             Decimal     @db.Decimal(12, 2)
+  areaUnit         AreaUnit    @default(SQ_FT)
+  length           Decimal?    @db.Decimal(8, 2)
+  width            Decimal?    @db.Decimal(8, 2)
+
+  /// Facing direction
+  facing           PlotFacing?
+
+  /// Layout placement & landmarks
+  block            String?     @db.VarChar(50)
+  sector           String?     @db.VarChar(50)
+  layoutReference   String?     @db.VarChar(100)
+
+  /// Pricing (Stored as Decimal for precise financial calculations)
+  basePricePerUnit Decimal?    @db.Decimal(14, 2)
+  totalPrice       Decimal     @db.Decimal(14, 2)
+  currency         String      @default("INR") @db.VarChar(10)
+
+  /// Special attributes & premiums
+  isCornerPlot     Boolean     @default(false)
+  isParkFacing     Boolean     @default(false)
+  premiumCharges   Decimal?    @default(0) @db.Decimal(14, 2)
+
+  description      String?     @db.Text
+  isActive         Boolean     @default(true)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  project          Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  bookings         Booking[]
+  modificationRequests ModificationRequest[]
+  documents DocumentMetadata[]
+
+  /// Plot number must be unique within a project
+  @@unique([projectId, plotNumber])
+  @@index([projectId])
+  @@index([status])
+  @@index([plotType])
+  @@index([totalPrice])
+  @@map("plots")
+}
+
+// ---------------------------------------------------------------------------
+// Buyer Enquiries & Plot Booking Lifecycle (Phase 9)
+// ---------------------------------------------------------------------------
+
+/// Central booking record managing plot reservation, review, and confirmation.
+/// Enforces database transactions to prevent double-booking.
+model Booking {
+  id                   String        @id @default(uuid()) @db.Uuid
+  bookingNumber        String        @unique @db.VarChar(50) // e.g. "BKG-2026-0001"
+  projectId            String        @db.Uuid
+  plotId               String        @db.Uuid
+  buyerId              String        @db.Uuid
+  organizationId       String        @db.Uuid
+  status               BookingStatus @default(SUBMITTED)
+
+  /// Financial figures
+  totalAgreedPrice     Decimal       @db.Decimal(14, 2)
+  bookingAmount        Decimal       @default(0) @db.Decimal(14, 2) // Token deposit
+  currency             String        @default("INR") @db.VarChar(10)
+
+  /// Temporary reservation hold expiry
+  reservationExpiresAt DateTime?
+
+  /// Notes and status reason metadata
+  notes                String?       @db.Text
+  rejectionReason      String?       @db.Text
+  cancellationReason   String?       @db.Text
+
+  /// Review & confirmation audit
+  reviewedById         String?       @db.Uuid
+  reviewedAt           DateTime?
+  confirmedAt          DateTime?
+  cancelledAt          DateTime?
+
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  project      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  plot         Plot              @relation(fields: [plotId], references: [id], onDelete: Restrict)
+  buyer        User              @relation("BuyerBookings", fields: [buyerId], references: [id], onDelete: Restrict)
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  reviewedBy   User?             @relation("ReviewedBookings", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  paymentRecords PaymentRecord[]
+  auditLogs      BookingAuditLog[]
+  modificationRequests ModificationRequest[]
+  documents DocumentMetadata[]
+
+  @@index([projectId])
+  @@index([plotId])
+  @@index([buyerId])
+  @@index([organizationId])
+  @@index([status])
+  @@map("bookings")
+}
+
+/// Manual or verified payment ledger for a booking (e.g. wire transfer, cheque, draft, UPI).
+/// Does not accept fake client-provided success flags; requires developer verification.
+model PaymentRecord {
+  id              String        @id @default(uuid()) @db.Uuid
+  paymentNumber   String        @unique @db.VarChar(50) // e.g. "PAY-2026-0001"
+  bookingId       String        @db.Uuid
+  amount          Decimal       @db.Decimal(14, 2)
+  currency        String        @default("INR") @db.VarChar(10)
+  paymentMethod   PaymentMethod @default(BANK_TRANSFER)
+  referenceNumber String?       @db.VarChar(100) // Bank UTR or Cheque number
+  status          PaymentStatus @default(PENDING_VERIFICATION)
+  notes           String?       @db.Text
+
+  recordedById    String        @db.Uuid
+  verifiedById    String?       @db.Uuid
+  verifiedAt      DateTime?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  booking    Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  recordedBy User    @relation("PaymentRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
+  verifiedBy User?   @relation("PaymentVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  @@index([bookingId])
+  @@index([status])
+  @@map("payment_records")
+}
+
+/// Immutable audit log tracking every state machine transition of a booking.
+model BookingAuditLog {
+  id            String         @id @default(uuid()) @db.Uuid
+  bookingId     String         @db.Uuid
+  performedById String         @db.Uuid
+  fromStatus    BookingStatus?
+  toStatus      BookingStatus
+  action        String         @db.VarChar(100)
+  notes         String?        @db.Text
+  createdAt     DateTime       @default(now())
+
+  booking     Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  performedBy User    @relation(fields: [performedById], references: [id], onDelete: Restrict)
+
+  @@index([bookingId])
+  @@map("booking_audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Contractor Work & Construction Progress (Phase 10)
+// ---------------------------------------------------------------------------
+
+model WorkPackage {
+  id             String            @id @default(uuid()) @db.Uuid
+  projectId      String            @db.Uuid
+  contractorOrgId String           @db.Uuid
+  assignedById   String            @db.Uuid
+  category       String            @db.VarChar(80)
+  title          String            @db.VarChar(160)
+  description    String?           @db.Text
+  plannedWeight  Decimal           @db.Decimal(10, 2)
+  status         WorkPackageStatus @default(PLANNED)
+  deadline       DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contractorOrg Organization @relation(fields: [contractorOrgId], references: [id], onDelete: Restrict)
+  assignedBy    User @relation("WorkPackageAssignedBy", fields: [assignedById], references: [id], onDelete: Restrict)
+  progressUpdates ProgressUpdate[]
+
+  @@index([projectId])
+  @@index([contractorOrgId])
+  @@index([status])
+  @@map("work_packages")
+}
+
+model ProgressUpdate {
+  id             String               @id @default(uuid()) @db.Uuid
+  workPackageId  String               @db.Uuid
+  submittedById  String               @db.Uuid
+  reviewedById   String?              @db.Uuid
+  workDate       DateTime             @db.Date
+  progressDelta  Decimal              @db.Decimal(5, 2)
+  description    String               @db.Text
+  photoMetadata  Json?
+  status         ProgressUpdateStatus @default(SUBMITTED)
+  reviewNote     String?              @db.Text
+  reviewedAt     DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  workPackage WorkPackage @relation(fields: [workPackageId], references: [id], onDelete: Cascade)
+  submittedBy User @relation("ProgressSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
+  reviewedBy User? @relation("ProgressReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([workPackageId, workDate, submittedById])
+  @@index([workPackageId, status])
+  @@index([submittedById])
+  @@map("progress_updates")
+}
+
+// ---------------------------------------------------------------------------
+// Buyer Modification Requests (Phase 11)
+// ---------------------------------------------------------------------------
+
+model ModificationRequest {
+  id                    String @id @default(uuid()) @db.Uuid
+  bookingId             String @db.Uuid
+  projectId             String @db.Uuid
+  plotId                String @db.Uuid
+  buyerId               String @db.Uuid
+  contractorOrgId       String? @db.Uuid
+  reviewedById          String? @db.Uuid
+  assignedById          String? @db.Uuid
+  status                ModificationRequestStatus @default(SUBMITTED)
+  description           String @db.Text
+  estimatedCost         Decimal? @db.Decimal(14, 2)
+  deadline              DateTime?
+  reviewNote            String? @db.Text
+  completionEvidence    Json?
+  submittedAt           DateTime @default(now())
+  reviewedAt            DateTime?
+  assignedAt            DateTime?
+  startedAt             DateTime?
+  completedAt           DateTime?
+  cancelledAt           DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  plot Plot @relation(fields: [plotId], references: [id], onDelete: Restrict)
+  buyer User @relation("ModificationBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
+  contractor Organization? @relation(fields: [contractorOrgId], references: [id], onDelete: Restrict)
+  reviewer User? @relation("ModificationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  assignedBy User? @relation("ModificationAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+  history ModificationRequestHistory[]
+
+  @@index([bookingId])
+  @@index([projectId, status])
+  @@index([buyerId])
+  @@index([contractorOrgId, status])
+  @@map("modification_requests")
+}
+
+model ModificationRequestHistory {
+  id             String @id @default(uuid()) @db.Uuid
+  requestId      String @db.Uuid
+  performedById  String @db.Uuid
+  fromStatus     ModificationRequestStatus?
+  toStatus       ModificationRequestStatus
+  note           String? @db.Text
+  createdAt      DateTime @default(now())
+
+  request ModificationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  performedBy User @relation(fields: [performedById], references: [id], onDelete: Restrict)
+
+  @@index([requestId, createdAt])
+  @@map("modification_request_history")
+}
+
+// Phase 12: Inventory quantities use decimal units and are derived from ledger entries.
+model Material {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  sku String @db.VarChar(60)
+  name String @db.VarChar(160)
+  unit String @db.VarChar(20)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requests MaterialRequest[]
+  orderLines PurchaseOrderLine[]
+  transactions StockTransaction[]
+  @@unique([organizationId, sku])
+  @@map("materials")
+}
+
+model MaterialRequest {
+  id String @id @default(uuid()) @db.Uuid
+  projectId String @db.Uuid
+  contractorOrgId String @db.Uuid
+  materialId String @db.Uuid
+  raisedById String @db.Uuid
+  reviewedById String? @db.Uuid
+  quantity Decimal @db.Decimal(14,3)
+  status MaterialRequestStatus @default(SUBMITTED)
+  note String? @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contractor Organization @relation(fields: [contractorOrgId], references: [id], onDelete: Restrict)
+  material Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  raisedBy User @relation("MaterialRequestRaisedBy", fields: [raisedById], references: [id], onDelete: Restrict)
+  reviewedBy User? @relation("MaterialRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  purchaseOrder PurchaseOrder?
+  @@index([projectId,status])
+  @@index([contractorOrgId])
+  @@map("material_requests")
+}
+
+model PurchaseOrder {
+  id String @id @default(uuid()) @db.Uuid
+  projectId String @db.Uuid
+  vendorOrgId String @db.Uuid
+  createdById String @db.Uuid
+  materialRequestId String? @unique @db.Uuid
+  status PurchaseOrderStatus @default(ISSUED)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vendor Organization @relation(fields: [vendorOrgId], references: [id], onDelete: Restrict)
+  createdBy User @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  lines PurchaseOrderLine[]
+  deliveries MaterialDelivery[]
+  materialRequest MaterialRequest? @relation(fields: [materialRequestId], references: [id], onDelete: Restrict)
+  @@index([projectId,status])
+  @@index([vendorOrgId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id String @id @default(uuid()) @db.Uuid
+  purchaseOrderId String @db.Uuid
+  materialId String @db.Uuid
+  quantity Decimal @db.Decimal(14,3)
+  unitPrice Decimal? @db.Decimal(14,2)
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  material Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  deliveries MaterialDeliveryLine[]
+  @@unique([purchaseOrderId,materialId])
+  @@map("purchase_order_lines")
+}
+
+model MaterialDelivery {
+  id String @id @default(uuid()) @db.Uuid
+  purchaseOrderId String @db.Uuid
+  vendorOrgId String @db.Uuid
+  deliveryReference String @db.VarChar(100)
+  deliveredAt DateTime
+  status DeliveryStatus @default(RECORDED)
+  createdAt DateTime @default(now())
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  vendor Organization @relation(fields: [vendorOrgId], references: [id], onDelete: Restrict)
+  lines MaterialDeliveryLine[]
+  @@unique([vendorOrgId,deliveryReference])
+  @@index([purchaseOrderId])
+  @@map("material_deliveries")
+}
+
+model MaterialDeliveryLine {
+  id String @id @default(uuid()) @db.Uuid
+  deliveryId String @db.Uuid
+  purchaseOrderLineId String @db.Uuid
+  deliveredQuantity Decimal @db.Decimal(14,3)
+  acceptedQuantity Decimal? @db.Decimal(14,3)
+  rejectedQuantity Decimal? @db.Decimal(14,3)
+  delivery MaterialDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  orderLine PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+  receipt StockReceipt?
+  @@map("material_delivery_lines")
+}
+
+model StockReceipt {
+  id String @id @default(uuid()) @db.Uuid
+  deliveryLineId String @unique @db.Uuid
+  inspectedById String @db.Uuid
+  acceptedQuantity Decimal @db.Decimal(14,3)
+  rejectedQuantity Decimal @db.Decimal(14,3)
+  note String? @db.Text
+  inspectedAt DateTime @default(now())
+  deliveryLine MaterialDeliveryLine @relation(fields: [deliveryLineId], references: [id], onDelete: Cascade)
+  inspectedBy User @relation("StockReceiptInspectedBy", fields: [inspectedById], references: [id], onDelete: Restrict)
+  transaction StockTransaction?
+  @@map("stock_receipts")
+}
+
+model MaterialIssue {
+  id String @id @default(uuid()) @db.Uuid
+  projectId String @db.Uuid
+  contractorOrgId String @db.Uuid
+  materialId String @db.Uuid
+  createdById String @db.Uuid
+  quantity Decimal @db.Decimal(14,3)
+  createdAt DateTime @default(now())
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contractor Organization @relation(fields: [contractorOrgId], references: [id], onDelete: Restrict)
+  createdBy User @relation("MaterialIssueCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  transactions StockTransaction[]
+  @@index([projectId,materialId])
+  @@map("material_issues")
+}
+
+model StockTransaction {
+  id String @id @default(uuid()) @db.Uuid
+  projectId String @db.Uuid
+  materialId String @db.Uuid
+  type StockTransactionType
+  quantity Decimal @db.Decimal(14,3)
+  deliveryId String? @db.Uuid
+  receiptId String? @unique @db.Uuid
+  issueId String? @db.Uuid
+  createdById String @db.Uuid
+  note String? @db.Text
+  createdAt DateTime @default(now())
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  material Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  receipt StockReceipt? @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  issue MaterialIssue? @relation(fields: [issueId], references: [id], onDelete: Restrict)
+  createdBy User @relation("StockTransactionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  @@index([projectId,materialId,createdAt])
+  @@map("stock_transactions")
+}
+
+// Phase 13 attendance: employee self-records; optional evidence is not proof of presence.
+model Attendance {
+  id String @id @default(uuid()) @db.Uuid
+  projectId String @db.Uuid
+  employeeId String @db.Uuid
+  workDate DateTime @db.Date
+  checkedInAt DateTime @default(now())
+  checkedOutAt DateTime?
+  status AttendanceStatus @default(CHECKED_IN)
+  checkInEvidence Json?
+  checkOutEvidence Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  employee User @relation("AttendanceEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+  corrections AttendanceCorrection[]
+  @@unique([employeeId,projectId,workDate])
+  @@index([projectId,workDate])
+  @@map("attendances")
+}
+model AttendanceCorrection {
+  id String @id @default(uuid()) @db.Uuid
+  attendanceId String @db.Uuid
+  requestedById String @db.Uuid
+  reviewedById String? @db.Uuid
+  proposedCheckIn DateTime?
+  proposedCheckOut DateTime?
+  reason String @db.Text
+  approved Boolean?
+  reviewNote String? @db.Text
+  createdAt DateTime @default(now())
+  reviewedAt DateTime?
+  attendance Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  requestedBy User @relation("AttendanceCorrectionRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedBy User? @relation("AttendanceCorrectionReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  @@index([attendanceId,createdAt])
+  @@map("attendance_corrections")
+}
+
+// Phase 14 private metadata and in-app supporting services.
+model DocumentMetadata {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId String? @db.Uuid
+  plotId String? @db.Uuid
+  bookingId String? @db.Uuid
+  category DocumentCategory
+  fileName String @db.VarChar(255)
+  contentType String @db.VarChar(120)
+  sizeBytes Int
+  storageKey String @unique @db.VarChar(500)
+  uploadedById String @db.Uuid
+  isPrivate Boolean @default(true)
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  plot Plot? @relation(fields: [plotId], references: [id], onDelete: Cascade)
+  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  uploadedBy User @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  @@index([organizationId,category])
+  @@index([projectId])
+  @@index([bookingId])
+  @@map("document_metadata")
+}
+model Notification {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  projectId String? @db.Uuid
+  eventType String @db.VarChar(80)
+  message String @db.VarChar(500)
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  @@index([userId,readAt,createdAt])
+  @@map("notifications")
+}
+model AuditEvent {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId String? @db.Uuid
+  actorId String @db.Uuid
+  entityType String @db.VarChar(80)
+  entityId String @db.Uuid
+  action String @db.VarChar(100)
+  details Json?
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  @@index([organizationId,createdAt])
+  @@index([projectId,createdAt])
+  @@index([entityType,entityId])
+  @@map("audit_events")
+}

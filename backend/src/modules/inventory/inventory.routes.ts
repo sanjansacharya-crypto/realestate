@@ -1,0 +1,15 @@
+import {Router} from 'express';import {Role,StockTransactionType} from '@prisma/client';import {authenticate} from '../auth/auth.middleware';import {requireOrganizationRole} from '../../middleware/authorize';import {validateBody} from '../../middleware/validateRequest';import {inventoryService as svc} from './inventory.service';import * as v from './inventory.validation';import {NextFunction,Request,Response} from 'express';
+export const inventoryRouter=Router();
+const h=(fn:(r:Request)=>Promise<any>,status=200)=>(r:Request,s:Response,n:NextFunction)=>fn(r).then(data=>s.status(status).json({success:true,data})).catch(n);
+const sc=(r:Request)=>({orgId:r.organization!.id,userId:r.user!.id,role:r.membership!.role,isSuperAdmin:r.user!.isSuperAdmin});
+inventoryRouter.post('/materials',authenticate,requireOrganizationRole([Role.DEVELOPER,Role.PLATFORM_ADMIN]),validateBody(v.materialSchema),h(r=>svc.createMaterial(sc(r),r.body),201));
+inventoryRouter.get('/materials',authenticate,requireOrganizationRole([Role.DEVELOPER,Role.PLATFORM_ADMIN,Role.CONTRACTOR,Role.VENDOR]),h(r=>svc.materials(sc(r))));
+inventoryRouter.post('/projects/:projectId/requests',authenticate,requireOrganizationRole([Role.CONTRACTOR,Role.EMPLOYEE]),validateBody(v.materialRequestSchema.omit({contractorOrgId:true})),h(r=>svc.request(sc(r),{...r.body,projectId:r.params.projectId,contractorOrgId:sc(r).orgId}),201));
+inventoryRouter.patch('/requests/:id/review',authenticate,requireOrganizationRole([Role.DEVELOPER,Role.PLATFORM_ADMIN]),validateBody(v.reviewRequestSchema),h(r=>svc.review(r.params.id,sc(r),r.body)));
+inventoryRouter.post('/projects/:projectId/orders',authenticate,requireOrganizationRole([Role.DEVELOPER,Role.PLATFORM_ADMIN]),validateBody(v.purchaseOrderSchema),h(r=>svc.order(sc(r),{...r.body,projectId:r.params.projectId}),201));
+inventoryRouter.post('/orders/:id/deliveries',authenticate,requireOrganizationRole([Role.VENDOR]),validateBody(v.deliverySchema),h(r=>svc.delivery(sc(r),r.params.id,r.body),201));
+inventoryRouter.patch('/delivery-lines/:id/inspect',authenticate,requireOrganizationRole([Role.DEVELOPER,Role.PLATFORM_ADMIN]),validateBody(v.inspectionSchema),h(r=>svc.inspect(r.params.id,sc(r),r.body)));
+inventoryRouter.post('/issues',authenticate,requireOrganizationRole([Role.DEVELOPER,Role.PLATFORM_ADMIN]),validateBody(v.issueSchema),h(r=>svc.issue(sc(r),r.body),201));
+inventoryRouter.get('/projects/:projectId/materials/:materialId/ledger',authenticate,requireOrganizationRole([Role.DEVELOPER,Role.PLATFORM_ADMIN,Role.CONTRACTOR]),h(r=>svc.ledger(r.params.projectId,r.params.materialId,sc(r))));
+inventoryRouter.post('/issues/:id/consumption',authenticate,requireOrganizationRole([Role.CONTRACTOR]),validateBody(v.ledgerEntrySchema),h(r=>svc.recordUsage(r.params.id,StockTransactionType.CONSUMPTION,sc(r),r.body),201));
+inventoryRouter.post('/issues/:id/wastage',authenticate,requireOrganizationRole([Role.CONTRACTOR]),validateBody(v.ledgerEntrySchema),h(r=>svc.recordUsage(r.params.id,StockTransactionType.WASTAGE,sc(r),r.body),201));

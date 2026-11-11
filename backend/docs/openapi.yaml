@@ -1,0 +1,130 @@
+openapi: 3.0.3
+info:
+  title: Real Estate & Construction Platform API
+  version: 1.0.0
+  description: Implemented API surface. Authenticated routes require a Bearer access token and active organization context.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      security: []
+      summary: Service and database health
+      responses:
+        '200': { description: Health response }
+  /inventory/materials:
+    get:
+      summary: List materials in the active organization
+      responses:
+        '200': { description: Material catalog }
+    post:
+      summary: Create a material
+      responses:
+        '201': { description: Material created }
+  /inventory/projects/{projectId}/requests:
+    post:
+      summary: Contractor requests material
+      parameters:
+        - { name: projectId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Material request created }
+  /inventory/requests/{id}/review:
+    patch:
+      summary: Seller reviews a material request
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Request reviewed }
+  /inventory/projects/{projectId}/orders:
+    post:
+      summary: Create purchase order
+      responses:
+        '201': { description: Purchase order created }
+  /inventory/orders/{id}/deliveries:
+    post:
+      summary: Vendor records a delivery
+      responses:
+        '201': { description: Delivery recorded }
+  /inventory/delivery-lines/{id}/inspect:
+    patch:
+      summary: Inspect delivered quantity
+      responses:
+        '200': { description: Receipt recorded }
+  /inventory/issues:
+    post:
+      summary: Issue stock to a contractor
+      responses:
+        '201': { description: Material issue created }
+  /inventory/projects/{projectId}/materials/{materialId}/ledger:
+    get:
+      summary: Read stock ledger and derived balance
+      responses:
+        '200': { description: Ledger entries and balance }
+  /inventory/issues/{id}/consumption:
+    post:
+      summary: Record material consumption
+      responses:
+        '201': { description: Consumption recorded }
+  /inventory/issues/{id}/wastage:
+    post:
+      summary: Record material wastage
+      responses:
+        '201': { description: Wastage recorded }
+  /attendance/check-in:
+    post:
+      summary: Employee check in
+      responses:
+        '201': { description: Attendance created }
+  /attendance/{id}/check-out:
+    patch:
+      summary: Employee check out
+      responses:
+        '200': { description: Attendance closed }
+  /attendance:
+    get:
+      summary: Read attendance history
+      responses:
+        '200': { description: Attendance entries }
+  /attendance/{id}/corrections:
+    post:
+      summary: Request attendance correction
+      responses:
+        '201': { description: Correction submitted }
+  /attendance/corrections/{id}/review:
+    patch:
+      summary: Employer reviews attendance correction
+      responses:
+        '200': { description: Correction reviewed }
+  /support/documents:
+    post:
+      summary: Register private document metadata
+      responses:
+        '201': { description: Metadata registered }
+  /support/documents/{id}:
+    get:
+      summary: Read authorized private document metadata
+      responses:
+        '200': { description: Document metadata }
+  /support/notifications:
+    get:
+      summary: Read current user's notifications
+      responses:
+        '200': { description: Notification inbox }
+  /support/notifications/{id}/read:
+    patch:
+      summary: Mark current user's notification read
+      responses:
+        '200': { description: Read status updated }
+  /support/audit:
+    get:
+      summary: Read organization audit events
+      responses:
+        '200': { description: Audit events }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

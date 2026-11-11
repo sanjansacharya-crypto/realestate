@@ -1,0 +1,17 @@
+import { Router } from 'express';
+import { Role } from '@prisma/client';
+import { authenticate } from '../auth/auth.middleware';
+import { requireOrganizationRole } from '../../middleware/authorize';
+import { validateBody } from '../../middleware/validateRequest';
+import { modificationController as c } from './modification.controller';
+import { assignModificationSchema, completeModificationSchema, createModificationSchema, reviewModificationSchema, transitionModificationSchema } from './modification.validation';
+export const modificationRouter = Router();
+const buyerSeller = [Role.BUYER, Role.DEVELOPER, Role.PLATFORM_ADMIN];
+modificationRouter.post('/', authenticate, requireOrganizationRole(buyerSeller), validateBody(createModificationSchema), c.create.bind(c));
+modificationRouter.get('/', authenticate, requireOrganizationRole([...buyerSeller, Role.CONTRACTOR]), c.list.bind(c));
+modificationRouter.get('/:id', authenticate, requireOrganizationRole([...buyerSeller, Role.CONTRACTOR]), c.get.bind(c));
+modificationRouter.patch('/:id/review', authenticate, requireOrganizationRole([Role.DEVELOPER, Role.PLATFORM_ADMIN]), validateBody(reviewModificationSchema), c.review.bind(c));
+modificationRouter.patch('/:id/assign', authenticate, requireOrganizationRole([Role.DEVELOPER, Role.PLATFORM_ADMIN]), validateBody(assignModificationSchema), c.assign.bind(c));
+modificationRouter.patch('/:id/start', authenticate, requireOrganizationRole([Role.CONTRACTOR]), validateBody(transitionModificationSchema), c.start.bind(c));
+modificationRouter.patch('/:id/complete', authenticate, requireOrganizationRole([Role.CONTRACTOR]), validateBody(completeModificationSchema), c.complete.bind(c));
+modificationRouter.patch('/:id/cancel', authenticate, requireOrganizationRole(buyerSeller), validateBody(transitionModificationSchema), c.cancel.bind(c));

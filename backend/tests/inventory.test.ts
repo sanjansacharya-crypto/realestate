@@ -1,0 +1,9 @@
+import {describe,it,expect} from 'vitest';
+import {deliverySchema,inspectionSchema,ledgerEntrySchema,materialRequestSchema,materialSchema,purchaseOrderSchema} from '../src/modules/inventory/inventory.validation';
+describe('Phase 12 inventory validation',()=>{
+ it('validates material master data and units',()=>{expect(materialSchema.safeParse({sku:'CEM-OPC',name:'OPC Cement',unit:'BAG'}).success).toBe(true);expect(materialSchema.safeParse({sku:'',name:'',unit:''}).success).toBe(false);});
+ it('requires positive material request quantity',()=>{expect(materialRequestSchema.safeParse({contractorOrgId:'11111111-1111-4111-8111-111111111111',materialId:'22222222-2222-4222-8222-222222222222',quantity:8}).success).toBe(true);expect(materialRequestSchema.safeParse({contractorOrgId:'11111111-1111-4111-8111-111111111111',materialId:'22222222-2222-4222-8222-222222222222',quantity:0}).success).toBe(false);});
+ it('accepts separate order lines and partial delivery lines',()=>{expect(purchaseOrderSchema.safeParse({vendorOrgId:'11111111-1111-4111-8111-111111111111',lines:[{materialId:'22222222-2222-4222-8222-222222222222',quantity:50}]}).success).toBe(true);expect(deliverySchema.safeParse({deliveryReference:'INV-1',deliveredAt:'2026-11-09T12:00:00.000Z',lines:[{purchaseOrderLineId:'33333333-3333-4333-8333-333333333333',deliveredQuantity:12.5}]}).success).toBe(true);});
+ it('requires inspection quantities to be non-negative',()=>{expect(inspectionSchema.safeParse({acceptedQuantity:8,rejectedQuantity:2}).success).toBe(true);expect(inspectionSchema.safeParse({acceptedQuantity:11,rejectedQuantity:-1}).success).toBe(false);});
+ it('requires positive consumption or wastage ledger quantities',()=>{expect(ledgerEntrySchema.safeParse({quantity:1,note:'Used on site'}).success).toBe(true);expect(ledgerEntrySchema.safeParse({quantity:0,note:'bad'}).success).toBe(false);});
+});
